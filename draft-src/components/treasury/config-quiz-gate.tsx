@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  PATH_BLURBS,
+  pathBlurbFor,
   QUIZ_QUESTIONS,
   scoreQuiz,
   writeQuizStored,
@@ -10,14 +10,16 @@ import {
   type QuizAnswers,
   type QuizStored,
 } from "@/lib/config-quiz";
+import type { Lang } from "@/lib/copy";
 
 type Step = "intro" | "ask" | "result";
 
 type Props = {
+  lang?: Lang;
   onComplete: (stored: QuizStored) => void;
 };
 
-export function ConfigQuizGate({ onComplete }: Props) {
+export function ConfigQuizGate({ lang = "zh-Hans", onComplete }: Props) {
   const [step, setStep] = useState<Step>("intro");
   const [index, setIndex] = useState(0);
   const [picks, setPicks] = useState<Partial<QuizAnswers>>({});
@@ -48,8 +50,8 @@ export function ConfigQuizGate({ onComplete }: Props) {
 
   const pathBlurb = useMemo(() => {
     if (!result) return null;
-    return PATH_BLURBS[result.path as PathType];
-  }, [result]);
+    return pathBlurbFor(result.path as PathType, lang);
+  }, [result, lang]);
 
   return (
     <div

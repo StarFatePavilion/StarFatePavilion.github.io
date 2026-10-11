@@ -174,6 +174,7 @@ export function shouldSkipInquiryEmail(stored?: QuizStored | null): boolean {
   return quiz?.answers?.Q1 === "A";
 }
 
+/** Internal PathType keys stay Simplified for scoring/localStorage compatibility. */
 export const PATH_BLURBS: Record<PathType, { title: string; body: string }> = {
   稳健短锁: {
     title: "稳健短锁",
@@ -188,6 +189,61 @@ export const PATH_BLURBS: Record<PathType, { title: string; body: string }> = {
     body: "偏长久期压舱：更看重跨周期票息与再平衡空间；适合有明确资金闲置周期、能接受市价波动的配置者。",
   },
 };
+
+type PathI18n = { title: string; body: string };
+
+const PATH_I18N: Record<PathType, Record<"zh-Hans" | "zh-Hant" | "en", PathI18n>> = {
+  稳健短锁: {
+    "zh-Hans": {
+      title: "稳健短锁",
+      body: "偏短久期、低波动取向：更适合用短中债做现金替代与确定性票息，先把入场节奏与账户路径理清。",
+    },
+    "zh-Hant": {
+      title: "穩健短鎖",
+      body: "偏短久期、低波動取向：更適合用短中債做現金替代與確定性票息，先把入場節奏與帳戶路徑理清。",
+    },
+    en: {
+      title: "Steady short lock",
+      body: "Shorter duration, lower-volatility tilt: use short/intermediate Treasuries as a cash alternative with more predictable coupons, then clarify entry timing and account path.",
+    },
+  },
+  平衡配置: {
+    "zh-Hans": {
+      title: "平衡配置",
+      body: "久期与票息兼顾：可用梯式配置分散再投资风险，再按利率窗口微调长短仓比例。",
+    },
+    "zh-Hant": {
+      title: "平衡配置",
+      body: "久期與票息兼顧：可用梯式配置分散再投資風險，再按利率窗口微調長短倉比例。",
+    },
+    en: {
+      title: "Balanced allocation",
+      body: "Balance duration and coupon: ladder holdings to spread reinvestment risk, then fine-tune the short/long mix around the rate window.",
+    },
+  },
+  长期压舱: {
+    "zh-Hans": {
+      title: "长期压舱",
+      body: "偏长久期压舱：更看重跨周期票息与再平衡空间；适合有明确资金闲置周期、能接受市价波动的配置者。",
+    },
+    "zh-Hant": {
+      title: "長期壓艙",
+      body: "偏長久期壓艙：更看重跨週期票息與再平衡空間；適合有明確資金閒置週期、能接受市價波動的配置者。",
+    },
+    en: {
+      title: "Long-term ballast",
+      body: "Longer-duration ballast: prioritise cross-cycle coupons and rebalancing room; suited to capital with a clear idle horizon that can tolerate mark-to-market swings.",
+    },
+  },
+};
+
+export function pathLabel(path: PathType, lang: "zh-Hans" | "zh-Hant" | "en" = "zh-Hans"): string {
+  return PATH_I18N[path]?.[lang]?.title ?? PATH_BLURBS[path].title;
+}
+
+export function pathBlurbFor(path: PathType, lang: "zh-Hans" | "zh-Hant" | "en" = "zh-Hans"): PathI18n {
+  return PATH_I18N[path]?.[lang] ?? PATH_BLURBS[path];
+}
 
 export const TIER_LABEL: Record<IntentTier, string> = {
   high: "高意向",

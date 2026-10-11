@@ -11,8 +11,10 @@ import { BacktestPanel } from "@/components/treasury/backtest-panel";
 import { OutlookPanel } from "@/components/treasury/outlook-panel";
 import { HoldPanel } from "@/components/treasury/hold-panel";
 import { AccessPanel } from "@/components/treasury/access-panel";
+import { ConfigQuizGate } from "@/components/treasury/config-quiz-gate";
 import { More, Term } from "@/components/treasury/ui";
 import { useTween } from "@/components/treasury/ui";
+import { clearQuizStored, pathLabel, readQuizStored, type QuizStored } from "@/lib/config-quiz";
 import type { YieldPoint } from "@/lib/history";
 import type { CurvePayload } from "@/lib/curve";
 import type { Lang } from "@/lib/copy";
@@ -41,18 +43,74 @@ function ladderBook(principal: number, spot: YieldPoint) {
 export function Desk({ initial }: { initial?: CurvePayload | null }) {
   return (
     <DeskState initial={initial}>
-      <DeskView />
+      <DeskShell />
     </DeskState>
   );
 }
 
-function DeskView() {
+function DeskShell() {
+  const { lang, setLang } = useDesk();
+  const [quiz, setQuiz] = useState<QuizStored | null | undefined>(undefined);
+  const [jumpAccessOnce, setJumpAccessOnce] = useState(false);
+
+  useEffect(() => {
+    setQuiz(readQuizStored());
+  }, []);
+
+  if (quiz === undefined) {
+    return <div className="min-h-screen bg-bg" aria-busy="true" />;
+  }
+
+  if (!quiz) {
+    return (
+      <ConfigQuizGate
+        lang={lang}
+        onComplete={(stored) => {
+          if (stored.tier === "high" && !stored.infoOnly) {
+            setLang("zh-Hans");
+            const url = new URL(window.location.href);
+            url.hash = "access";
+            window.history.replaceState(null, "", `${url.pathname}${url.search}#access`);
+            setJumpAccessOnce(true);
+          }
+          setQuiz(stored);
+        }}
+      />
+    );
+  }
+
+  return (
+    <DeskView
+      quiz={quiz}
+      jumpAccessOnce={jumpAccessOnce}
+      onJumpAccessHandled={() => setJumpAccessOnce(false)}
+      onRetake={() => {
+        clearQuizStored();
+        setQuiz(null);
+      }}
+    />
+  );
+}
+
+function DeskView({
+  quiz,
+  onRetake,
+  jumpAccessOnce = false,
+  onJumpAccessHandled,
+}: {
+  quiz: QuizStored;
+  onRetake: () => void;
+  jumpAccessOnce?: boolean;
+  onJumpAccessHandled?: () => void;
+}) {
   const { tenor, setTenor, principal, setPrincipal, ccy, setCcy, lang, setLang, setShockBp, shockBp, spot, asOf, source, weights } = useDesk();
   const t = useT();
   const y = yieldOf(spot, tenor);
   const shownY = useTween(y, 320);
   const [copied, setCopied] = useState(false);
   const [ladder, setLadder] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  const [activeJump, setActiveJump] = useState("");
   const jumpAccess = useRef(false);
   const openAccess = () => {
     jumpAccess.current = true;
@@ -67,12 +125,41 @@ function DeskView() {
   // Deep link: ?lang=zh-Hans#access (panel mounts only after lang flips to zh-Hans)
   useEffect(() => {
     if (lang !== "zh-Hans") return;
-    if (window.location.hash !== "#access") return;
+    if (window.location.hash !== "#access" && !jumpAccessOnce) return;
     const id = window.requestAnimationFrame(() => {
       document.getElementById("access")?.scrollIntoView({ block: "start" });
+      onJumpAccessHandled?.();
     });
     return () => window.cancelAnimationFrame(id);
+  }, [lang, jumpAccessOnce, onJumpAccessHandled]);
+  useEffect(() => {
+    const ids = ["cash", "shock", "hold", "backtest", "outlook", "access"];
+    const nodes = ids
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => Boolean(el));
+    if (!nodes.length) return;
+    const ratios = new Map<string, number>();
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          ratios.set(entry.target.id, entry.isIntersecting ? entry.intersectionRatio : 0);
+        }
+        let bestId = "";
+        let best = 0;
+        for (const [id, ratio] of ratios) {
+          if (ratio > best) {
+            best = ratio;
+            bestId = id;
+          }
+        }
+        if (bestId) setActiveJump(`#${bestId}`);
+      },
+      { rootMargin: "-18% 0px -55% 0px", threshold: [0, 0.15, 0.35, 0.55] },
+    );
+    for (const node of nodes) obs.observe(node);
+    return () => obs.disconnect();
   }, [lang]);
+
   const semi = (principal * y) / 100 / 2;
   const interest = (principal * y * tenor) / 100;
   const dur = modifiedDuration(y / 100, y / 100, tenor);
@@ -88,16 +175,23 @@ function DeskView() {
   return (
     <main className="min-h-screen pb-20">
       <header className="mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-medium tracking-widest text-faint">{t.kicker}</p>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <p className="sfp-kicker sfp-kicker-latin shrink-0 pt-1">{t.kicker}</p>
+          <div className="flex flex-wrap items-center gap-2">
             {lang === "zh-Hans" ? (
-              <a href="#access" className="h-7 rounded-md border border-line bg-elevated px-2 text-xs font-medium text-fg">
-                {accessCtaLabel}
+              <a
+                href="#access"
+                className={
+                  quiz.tier === "high" && !quiz.infoOnly
+                    ? "inline-flex h-8 items-center rounded-md border border-accent/40 bg-accent px-2.5 text-xs font-medium text-accent-fg"
+                    : "inline-flex h-8 items-center rounded-md border border-line bg-elevated px-2.5 text-xs font-medium text-fg"
+                }
+              >
+                {quiz.tier === "high" && !quiz.infoOnly ? "预约开户沟通" : accessCtaLabel}
               </a>
             ) : (
-              <button type="button" onClick={openAccess} className="h-7 rounded-md border border-accent/40 bg-accent/10 px-2 text-xs font-medium text-fg">
-                {accessCtaLabel}
+              <button type="button" onClick={openAccess} className="inline-flex h-8 items-center rounded-md border border-accent/40 bg-accent/10 px-2.5 text-xs font-medium text-fg">
+                {quiz.tier === "high" && !quiz.infoOnly ? (lang === "en" ? "Book consult" : "預約開戶溝通") : accessCtaLabel}
               </button>
             )}
             <div className="flex items-center rounded-md border border-line bg-subtle p-0.5" role="group" aria-label={t.langAria}>
@@ -109,8 +203,8 @@ function DeskView() {
                 onClick={() => setLang(item.id)}
                 className={
                   lang === item.id
-                    ? "h-7 rounded px-2 text-xs text-fg bg-elevated"
-                    : "h-7 rounded px-2 text-xs text-faint"
+                    ? "inline-flex h-8 items-center rounded px-2.5 text-xs text-fg bg-elevated"
+                    : "inline-flex h-8 items-center rounded px-2.5 text-xs text-faint"
                 }
               >
                 {item.label}
@@ -139,7 +233,7 @@ function DeskView() {
                   () => undefined,
                 );
               }}
-              className="h-7 rounded px-2 text-xs text-faint"
+              className="inline-flex h-8 items-center rounded px-2.5 text-xs text-faint"
             >
               {copied ? t.play.copied : t.play.share}
             </button>
@@ -148,6 +242,22 @@ function DeskView() {
         </div>
         <h1 className="mt-4 font-serif text-4xl text-fg md:text-5xl">{t.appName}</h1>
         <p className="mt-3 max-w-xl text-base text-muted">{t.lede}</p>
+        <p className="mt-3 max-w-xl text-sm text-faint">
+          {lang === "en" ? "Your path map: " : lang === "zh-Hans" ? "你的路径图：" : "你的路徑圖："}
+          <span className="text-fg">{pathLabel(quiz.path, lang)}</span>
+          {quiz.tier === "high" && !quiz.infoOnly ? (
+            <>
+              {" · "}
+              <a href="#access" className="font-medium text-fg underline" onClick={(e) => { if (lang !== "zh-Hans") { e.preventDefault(); openAccess(); } }}>
+                {lang === "en" ? "Book 1:1 review / account opening" : lang === "zh-Hans" ? "预约一对一解读 / 开户沟通" : "預約一對一解讀 / 開戶溝通"}
+              </a>
+            </>
+          ) : null}
+          {" · "}
+          <button type="button" onClick={onRetake} className="underline-offset-2 hover:underline">
+            {lang === "en" ? "Retake quiz" : lang === "zh-Hans" ? "重新自测" : "重新自測"}
+          </button>
+        </p>
         <p className="mt-6 text-xs text-faint">
           <span className="mr-2 inline-block size-1.5 rounded-full bg-up align-middle motion-safe:animate-pulse" />
           {t.asOf(tenor, t.date(asOf))}
@@ -159,45 +269,88 @@ function DeskView() {
         <p className="mt-2 max-w-xl text-xs text-faint">{t.feed[source]}</p>
       </header>
 
-      <div className="sticky top-0 z-30 mt-6 border-y border-line bg-bg/95 backdrop-blur-md">
-        <div className="mx-auto grid max-w-6xl grid-cols-5 gap-2 px-4 py-3 md:px-8" role="tablist" aria-label={t.tenorAria}>
-          {TENORS.map((item) => {
-            const active = item === tenor;
-            return (
-              <button
-                key={item}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTenor(item)}
-                className={
-                  active
-                    ? "flex h-12 flex-col items-center justify-center rounded-md bg-accent text-accent-fg"
-                    : "flex h-12 flex-col items-center justify-center rounded-md border border-line text-fg"
-                }
-              >
-                <span className="text-sm font-medium leading-none">{t.tenor(item)}</span>
-                <span className="mt-1 text-xs tabular-nums leading-none opacity-70">{pct(yieldOf(spot, item))}</span>
-              </button>
-            );
-          })}
+      <div className="sfp-sticky-bar sticky top-0 z-30 mt-6">
+        <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2.5 md:px-8">
+          <div className="flex min-w-0 flex-1 items-stretch gap-1.5 overflow-x-auto md:gap-2" role="tablist" aria-label={t.tenorAria}>
+            {TENORS.map((item) => {
+              const active = item === tenor;
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTenor(item)}
+                  className={
+                    active
+                      ? "flex h-11 w-[4.25rem] shrink-0 flex-col items-center justify-center rounded-md bg-accent px-1 text-accent-fg sm:w-auto sm:min-w-[4.5rem] sm:px-2 md:h-12 md:min-w-[5.25rem]"
+                      : "flex h-11 w-[4.25rem] shrink-0 flex-col items-center justify-center rounded-md border border-line px-1 text-fg sm:w-auto sm:min-w-[4.5rem] sm:px-2 md:h-12 md:min-w-[5.25rem]"
+                  }
+                >
+                  <span className="text-xs font-medium leading-none md:text-sm">{t.tenor(item)}</span>
+                  <span className="mt-1 hidden text-[10px] tabular-nums leading-none opacity-70 sm:block md:text-xs">{pct(yieldOf(spot, item))}</span>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className="inline-flex h-11 shrink-0 items-center rounded-md border border-line bg-bg px-2.5 text-xs text-muted md:hidden"
+            aria-expanded={navOpen}
+            aria-controls="sfp-module-drawer"
+            onClick={() => setNavOpen((v) => !v)}
+          >
+            {navOpen ? "收起" : "模块"}
+          </button>
         </div>
-        <nav className="mx-auto flex max-w-6xl items-center gap-4 overflow-x-auto px-4 pb-3 text-sm md:px-8" aria-label={t.navAria}>
+        <nav
+          id="sfp-module-drawer"
+          className={
+            navOpen
+              ? "sfp-drawer-sheet mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-sm md:flex md:flex-nowrap md:overflow-x-auto md:border-t-0 md:bg-transparent md:px-8 md:pb-3 md:pt-0"
+              : "mx-auto hidden max-w-6xl items-center gap-4 overflow-x-auto bg-bg px-4 pb-3 text-sm md:flex md:px-8"
+          }
+          aria-label={t.navAria}
+        >
           {jumps.map(([href, label]) => (
-            <a key={href} href={href} className="shrink-0 text-muted">
+            <a
+              key={href}
+              href={href}
+              className={
+                activeJump === href
+                  ? "sfp-nav-active shrink-0 pb-0.5 font-medium text-fg"
+                  : "shrink-0 pb-0.5 text-muted"
+              }
+              onClick={() => setNavOpen(false)}
+            >
               {label}
             </a>
           ))}
           {lang === "zh-Hans" ? (
-            <a href="#access" className="shrink-0 font-medium text-fg">
+            <a
+              href="#access"
+              className={
+                activeJump === "#access"
+                  ? "sfp-nav-active shrink-0 pb-0.5 font-medium text-fg"
+                  : "shrink-0 pb-0.5 font-medium text-fg"
+              }
+              onClick={() => setNavOpen(false)}
+            >
               途径 · {accessCtaLabel}
             </a>
           ) : (
-            <button type="button" onClick={openAccess} className="shrink-0 font-medium text-fg underline-offset-2 hover:underline">
+            <button
+              type="button"
+              onClick={() => {
+                setNavOpen(false);
+                openAccess();
+              }}
+              className="shrink-0 font-medium text-fg underline-offset-2 hover:underline"
+            >
               {accessCtaLabel}
             </button>
           )}
-          <button type="button" onClick={() => setShockBp(0)} className="ml-auto shrink-0 text-faint">
+          <button type="button" onClick={() => setShockBp(0)} className="shrink-0 text-faint md:ml-auto">
             {t.reset}
           </button>
         </nav>
@@ -205,19 +358,19 @@ function DeskView() {
 
       <div className="mx-auto mt-8 max-w-6xl px-4 md:px-8">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <article className="rounded-lg border border-line bg-elevated px-4 py-4 shadow-lg">
+          <article className="sfp-rail rounded-md px-4 py-4">
             <p className="text-xs text-faint">{t.principal}</p>
             <p className="mt-2 font-serif text-2xl tabular-nums text-fg md:text-3xl">{money(principal, ccy)}</p>
           </article>
-          <article className="rounded-lg border border-line bg-elevated px-4 py-4 shadow-lg">
+          <article className="sfp-rail rounded-md px-4 py-4">
             <p className="text-xs text-faint">{t.semi}</p>
-            <p className="mt-2 font-serif text-2xl tabular-nums text-up md:text-3xl">{money(semi, ccy, 2)}</p>
+            <p className="mt-2 font-serif text-2xl tabular-nums text-fg md:text-3xl">{money(semi, ccy, 2)}</p>
           </article>
-          <article className="rounded-lg border border-line bg-elevated px-4 py-4 shadow-lg">
+          <article className="sfp-rail rounded-md px-4 py-4">
             <p className="text-xs text-faint">{t.cash.total}</p>
             <p className="mt-2 font-serif text-2xl tabular-nums text-fg md:text-3xl">{money(principal + interest, ccy)}</p>
           </article>
-          <article className="rounded-lg border border-line bg-elevated px-4 py-4 shadow-lg">
+          <article className="sfp-rail rounded-md px-4 py-4">
             <p className="text-xs text-faint">
               <Term tip={t.tips.duration}>{t.modDur}</Term>
             </p>
@@ -236,8 +389,8 @@ function DeskView() {
                 onClick={() => setPrincipal(value)}
                 className={
                   active
-                    ? "rounded-lg border border-fg bg-subtle px-3 py-3 text-left shadow-lg"
-                    : "rounded-lg border border-line bg-elevated px-3 py-3 text-left"
+                    ? "rounded-md border border-accent/50 bg-subtle px-3 py-3 text-left"
+                    : "sfp-rail rounded-md px-3 py-3 text-left"
                 }
               >
                 <span className="block text-sm font-medium text-fg">{t.preset(value)}</span>
@@ -266,7 +419,6 @@ function DeskView() {
               }}
               className="w-28 bg-transparent text-fg tabular-nums outline-none"
             />
-            <span className="text-faint">{t.usd}</span>
           </label>
           <div className="flex h-11 rounded-md border border-line p-1">
             {(["USD", "HKD"] as const).map((item) => (
@@ -321,7 +473,7 @@ function DeskView() {
         <CashflowPanel />
         <ShockPanel />
         <HoldPanel />
-        <div className="rounded-lg border border-dashed border-line bg-subtle px-4 py-3 text-sm text-muted">
+        <div className="rounded-md border border-dashed border-line bg-subtle/80 px-4 py-3 text-sm text-muted">
           <span>{lang === "en" ? "Ready to open a Hong Kong account for US Treasuries?" : lang === "zh-Hans" ? "算完持有情景后，想了解怎么开户买美债？" : "算完持有情景後，想了解怎麼開戶買美債？"} </span>
           {lang === "zh-Hans" ? (
             <a href="#access" className="font-medium text-fg underline">
@@ -335,7 +487,7 @@ function DeskView() {
         </div>
         <BacktestPanel />
         <OutlookPanel />
-        <div className="rounded-lg border border-dashed border-line bg-subtle px-4 py-3 text-sm text-muted">
+        <div className="rounded-md border border-dashed border-line bg-subtle/80 px-4 py-3 text-sm text-muted">
           <span>{lang === "en" ? "Next step: mainland pathways & Hong Kong account opening." : lang === "zh-Hans" ? "看完路径展望，下一步了解开户途径：" : "睇完路徑展望，下一步了解開戶途徑："} </span>
           {lang === "zh-Hans" ? (
             <a href="#access" className="font-medium text-fg underline">
@@ -347,8 +499,15 @@ function DeskView() {
             </button>
           )}
         </div>
-        <AccessPanel />
       </div>
+
+      {lang === "zh-Hans" ? (
+        <div className="sfp-veil-band mt-10">
+          <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
+            <AccessPanel />
+          </div>
+        </div>
+      ) : null}
 
       <footer className="mx-auto mt-12 max-w-6xl px-4 text-xs text-faint md:px-8">
         {lang !== "zh-Hans" ? (
