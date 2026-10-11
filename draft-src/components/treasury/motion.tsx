@@ -1,9 +1,12 @@
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
+  type RefCallback,
   type RefObject,
 } from "react";
 
@@ -19,13 +22,34 @@ export function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
-/** Fire once when element enters viewport (or immediately if reduced motion). */
+/** Fire once when element enters viewport (or immediately if reduced motion).
+ *  Retries until ref is attached — WhenMounted renders null on first paint.
+ */
 export function useInViewOnce<T extends HTMLElement = HTMLDivElement>(
   options?: IntersectionObserverInit,
 ): [RefObject<T | null>, boolean] {
   const ref = useRef<T | null>(null);
   const [inView, setInView] = useState(false);
+  const [attached, setAttached] = useState(0);
   const reduced = usePrefersReducedMotion();
+
+  useLayoutEffect(() => {
+    if (inView || reduced) return;
+    if (ref.current) {
+      setAttached((n) => n + 1);
+      return;
+    }
+    let raf = 0;
+    const check = () => {
+      if (ref.current) {
+        setAttached((n) => n + 1);
+        return;
+      }
+      raf = window.requestAnimationFrame(check);
+    };
+    raf = window.requestAnimationFrame(check);
+    return () => window.cancelAnimationFrame(raf);
+  }, [inView, reduced]);
 
   useEffect(() => {
     if (reduced) {
@@ -45,7 +69,7 @@ export function useInViewOnce<T extends HTMLElement = HTMLDivElement>(
     );
     obs.observe(node);
     return () => obs.disconnect();
-  }, [reduced, inView, options]);
+  }, [reduced, inView, options, attached]);
 
   return [ref, inView];
 }
@@ -95,71 +119,154 @@ export function useNumFlash(value: string): string {
   return flash ? "sfp-num-flash" : "";
 }
 
+const CURVE_SEL =
+  "path.recharts-curve, .recharts-line-curve, .recharts-area-curve, path.recharts-line-curve";
+
+function paintStrokeDash(root: HTMLElement, reduced: boolean, duration: number) {
+  const paths = root.querySelectorAll<SVGPathElement>(CURVE_SEL);
+  let painted = 0;
+  for (const el of paths) {
+    const strokeAttr = el.getAttribute("stroke");
+    if (strokeAttr === "none") continue;
+    let len = 0;
+    try {
+      len = el.getTotalLength();
+    } catch {
+      continue;
+    }
+    if (!len || !Number.isFinite(len)) continue;
+
+    el.style.transition = "none";
+    el.style.strokeDasharray = `${len}`;
+    el.style.strokeDashoffset = reduced ? "0" : `${len}`;
+    void el.getBoundingClientRect();
+    if (reduced) {
+      painted += 1;
+      continue;
+    }
+    el.style.transition = `stroke-dashoffset ${duration}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+    el.style.strokeDashoffset = "0";
+    painted += 1;
+  }
+  return painted;
+}
+
 /** Recharts draw: controllable stroke-dash on first in-view / when `dep` changes.
- *  Recharts isAnimationActive does not expose stroke-dasharray in DOM — we own the draw.
+ *  Attaches IntersectionObserver only after container ref is real (WhenMounted
+ *  starts as null). MutationObserver / ResizeObserver wait for .recharts-line-curve.
  *  prefers-reduced-motion → instant full line (no dash anim).
  */
 export function useChartDraw(dep?: unknown): {
-  ref: RefObject<HTMLDivElement | null>;
+  ref: RefCallback<HTMLDivElement>;
   /** Always false: disable Recharts built-in; dash anim runs in this hook. */
   active: boolean;
   duration: number;
   key: number;
 } {
-  const [ref, inView] = useInViewOnce<HTMLDivElement>();
+  const nodeRef = useRef<HTMLDivElement | null>(null);
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
+  const [inView, setInView] = useState(false);
+  const [pathsReady, setPathsReady] = useState(0);
   const reduced = usePrefersReducedMotion();
   const [key, setKey] = useState(0);
-  const first = useRef(true);
+  const firstDep = useRef(true);
+  const duration = reduced ? 0 : 420;
 
+  const setRef = useCallback((el: HTMLDivElement | null) => {
+    nodeRef.current = el;
+    setNode(el);
+  }, []);
+
+  // IntersectionObserver only after container is mounted
   useEffect(() => {
-    if (!inView || reduced) return;
-    if (first.current) {
-      first.current = false;
+    if (reduced) {
+      setInView(true);
+      return;
+    }
+    if (!node || inView) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setInView(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -8% 0px", threshold: 0.12 },
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [node, reduced, inView]);
+
+  // Wait for Recharts paths to exist (null frame → SVG later). Once per key.
+  useEffect(() => {
+    if (!node || !inView) return;
+    let armed = true;
+
+    const bump = () => {
+      if (!armed) return;
+      if (!node.querySelector(CURVE_SEL)) return;
+      armed = false;
+      setPathsReady((n) => n + 1);
+    };
+
+    bump();
+
+    const mo = new MutationObserver(bump);
+    mo.observe(node, { childList: true, subtree: true });
+
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(bump)
+        : null;
+    ro?.observe(node);
+
+    // Recharts often paints a frame after mount / key remount
+    const t1 = window.setTimeout(bump, 32);
+    const t2 = window.setTimeout(bump, 120);
+    const t3 = window.setTimeout(bump, 280);
+
+    return () => {
+      armed = false;
+      mo.disconnect();
+      ro?.disconnect();
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+    };
+  }, [node, inView, key]);
+
+  // Param / tenor change after first view → remount chart so dash can re-run
+  useEffect(() => {
+    if (!inView) return;
+    if (firstDep.current) {
+      firstDep.current = false;
       return;
     }
     setKey((k) => k + 1);
-  }, [dep, inView, reduced]);
+  }, [dep, inView]);
 
+  // Paint dash: first in-view and after remount / path appear
   useEffect(() => {
-    const root = ref.current;
-    if (!root || !inView) return;
+    const root = nodeRef.current;
+    if (!root || !inView || pathsReady === 0) return;
 
-    const duration = reduced ? 0 : 420;
     let cancelled = false;
     let raf1 = 0;
     let raf2 = 0;
     let timer = 0;
+    let tries = 0;
 
-    const paintDash = () => {
+    const run = () => {
       if (cancelled) return;
-      const paths = root.querySelectorAll<SVGPathElement>(
-        "path.recharts-curve, .recharts-line-curve, .recharts-area-curve",
-      );
-      for (const el of paths) {
-        const strokeAttr = el.getAttribute("stroke");
-        if (strokeAttr === "none") continue;
-        let len = 0;
-        try {
-          len = el.getTotalLength();
-        } catch {
-          continue;
-        }
-        if (!len || !Number.isFinite(len)) continue;
-
-        el.style.transition = "none";
-        el.style.strokeDasharray = `${len}`;
-        el.style.strokeDashoffset = reduced ? "0" : `${len}`;
-        void el.getBoundingClientRect();
-        if (reduced) continue;
-        el.style.transition = `stroke-dashoffset ${duration}ms cubic-bezier(0.22, 1, 0.36, 1)`;
-        el.style.strokeDashoffset = "0";
+      const n = paintStrokeDash(root, reduced, duration);
+      if (n === 0 && tries < 8) {
+        tries += 1;
+        timer = window.setTimeout(run, 40 + tries * 20);
       }
     };
 
-    // Recharts paints after mount / key remount — double-rAF + short retry
     raf1 = window.requestAnimationFrame(() => {
-      raf2 = window.requestAnimationFrame(paintDash);
-      timer = window.setTimeout(paintDash, 48);
+      raf2 = window.requestAnimationFrame(run);
     });
 
     return () => {
@@ -168,12 +275,12 @@ export function useChartDraw(dep?: unknown): {
       window.cancelAnimationFrame(raf2);
       window.clearTimeout(timer);
     };
-  }, [inView, reduced, key, ref]);
+  }, [inView, reduced, key, pathsReady, duration]);
 
   return {
-    ref,
+    ref: setRef,
     active: false,
-    duration: reduced ? 0 : 420,
+    duration,
     key,
   };
 }
