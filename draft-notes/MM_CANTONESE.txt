@@ -1,0 +1,5 @@
+本地漏斗草稿已備好（未 push / 未開 PR）：
+1) ?lang=zh-Hans#access 深鏈 + utm_* 入 sessionStorage 並跟 FormSubmit 一齊送（途徑標「香港开户」）
+2) 非簡體頂欄／導航／Hold／Outlook 後加「了解開戶」CTA → 切簡體並滚去 #access
+3) 通知仍係 server 優先、FormSubmit fallback；成功事件已預留 Plausible/GA4（欠 property ID，暫唔落 script）
+GitHub 上得 .github.io 一個公庫，源碼喺本機 /workspace/us-treasury。要上線需用戶批準：套草稿→build→推 Pages。
