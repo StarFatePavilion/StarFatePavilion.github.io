@@ -70,12 +70,24 @@ export function trackInquirySuccess(extra?: Record<string, string>) {
   if (typeof window === "undefined") return;
   const props = { pathway: "香港开户", ...utmPayload(), ...extra };
   try {
+    type PlausibleFn = ((event: string, opts?: { props?: Record<string, string> }) => void) & {
+      q?: unknown[];
+    };
     const w = window as Window & {
-      plausible?: (event: string, opts?: { props?: Record<string, string> }) => void;
+      plausible?: PlausibleFn;
       gtag?: (...args: unknown[]) => void;
       dataLayer?: unknown[];
     };
-    w.plausible?.("inquiry_success", { props });
+    // Ensure queue stub exists so events are not dropped before deferred script loads.
+    if (typeof w.plausible !== "function") {
+      const q: unknown[] = [];
+      const stub = ((...args: unknown[]) => {
+        q.push(args);
+      }) as PlausibleFn;
+      stub.q = q;
+      w.plausible = stub;
+    }
+    w.plausible("inquiry_success", { props });
     w.gtag?.("event", "inquiry_success", props);
     w.dataLayer?.push({ event: "inquiry_success", ...props });
   } catch {
