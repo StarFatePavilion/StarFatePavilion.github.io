@@ -314,4 +314,10 @@
   .sfp-nav-active {
     transition: none !important;
   }
+  path.recharts-curve,
+  .recharts-line-curve,
+  .recharts-area-curve {
+    transition: none !important;
+    stroke-dashoffset: 0 !important;
+  }
 }

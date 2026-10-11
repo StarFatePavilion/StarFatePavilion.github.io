@@ -95,9 +95,13 @@ export function useNumFlash(value: string): string {
   return flash ? "sfp-num-flash" : "";
 }
 
-/** Recharts draw: animate on first in-view and when `dep` changes. */
+/** Recharts draw: controllable stroke-dash on first in-view / when `dep` changes.
+ *  Recharts isAnimationActive does not expose stroke-dasharray in DOM — we own the draw.
+ *  prefers-reduced-motion → instant full line (no dash anim).
+ */
 export function useChartDraw(dep?: unknown): {
   ref: RefObject<HTMLDivElement | null>;
+  /** Always false: disable Recharts built-in; dash anim runs in this hook. */
   active: boolean;
   duration: number;
   key: number;
@@ -116,9 +120,59 @@ export function useChartDraw(dep?: unknown): {
     setKey((k) => k + 1);
   }, [dep, inView, reduced]);
 
+  useEffect(() => {
+    const root = ref.current;
+    if (!root || !inView) return;
+
+    const duration = reduced ? 0 : 420;
+    let cancelled = false;
+    let raf1 = 0;
+    let raf2 = 0;
+    let timer = 0;
+
+    const paintDash = () => {
+      if (cancelled) return;
+      const paths = root.querySelectorAll<SVGPathElement>(
+        "path.recharts-curve, .recharts-line-curve, .recharts-area-curve",
+      );
+      for (const el of paths) {
+        const strokeAttr = el.getAttribute("stroke");
+        if (strokeAttr === "none") continue;
+        let len = 0;
+        try {
+          len = el.getTotalLength();
+        } catch {
+          continue;
+        }
+        if (!len || !Number.isFinite(len)) continue;
+
+        el.style.transition = "none";
+        el.style.strokeDasharray = `${len}`;
+        el.style.strokeDashoffset = reduced ? "0" : `${len}`;
+        void el.getBoundingClientRect();
+        if (reduced) continue;
+        el.style.transition = `stroke-dashoffset ${duration}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+        el.style.strokeDashoffset = "0";
+      }
+    };
+
+    // Recharts paints after mount / key remount — double-rAF + short retry
+    raf1 = window.requestAnimationFrame(() => {
+      raf2 = window.requestAnimationFrame(paintDash);
+      timer = window.setTimeout(paintDash, 48);
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(raf1);
+      window.cancelAnimationFrame(raf2);
+      window.clearTimeout(timer);
+    };
+  }, [inView, reduced, key, ref]);
+
   return {
     ref,
-    active: inView && !reduced,
+    active: false,
     duration: reduced ? 0 : 420,
     key,
   };

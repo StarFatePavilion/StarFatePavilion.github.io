@@ -112,6 +112,8 @@ function DeskView({
   const [navOpen, setNavOpen] = useState(false);
   const [activeJump, setActiveJump] = useState("");
   const jumpAccess = useRef(false);
+  /** Only scroll to #access on real nav / first deep-link — never on desk state updates. */
+  const deepLinkScrolled = useRef(false);
   const openAccess = () => {
     jumpAccess.current = true;
     setLang("zh-Hans");
@@ -120,18 +122,26 @@ function DeskView({
   useEffect(() => {
     if (!jumpAccess.current || lang !== "zh-Hans") return;
     jumpAccess.current = false;
+    deepLinkScrolled.current = true;
     document.getElementById("access")?.scrollIntoView({ block: "start" });
   }, [lang]);
-  // Deep link: ?lang=zh-Hans#access (panel mounts only after lang flips to zh-Hans)
+  // Deep link: ?lang=zh-Hans#access — scroll once when panel mounts; ignore later desk re-renders
   useEffect(() => {
-    if (lang !== "zh-Hans") return;
-    if (window.location.hash !== "#access" && !jumpAccessOnce) return;
+    if (lang !== "zh-Hans") {
+      deepLinkScrolled.current = false;
+      return;
+    }
+    const fromHash = window.location.hash === "#access";
+    const should = jumpAccessOnce || (fromHash && !deepLinkScrolled.current);
+    if (!should) return;
+    deepLinkScrolled.current = true;
     const id = window.requestAnimationFrame(() => {
       document.getElementById("access")?.scrollIntoView({ block: "start" });
       onJumpAccessHandled?.();
     });
     return () => window.cancelAnimationFrame(id);
-  }, [lang, jumpAccessOnce, onJumpAccessHandled]);
+    // intentionally omit onJumpAccessHandled — unstable identity was re-yanking on shock/tenor updates
+  }, [lang, jumpAccessOnce]);
   useEffect(() => {
     const ids = ["cash", "shock", "hold", "backtest", "outlook", "access"];
     const nodes = ids

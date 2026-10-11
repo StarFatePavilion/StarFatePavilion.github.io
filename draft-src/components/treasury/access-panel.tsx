@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useDesk } from "@/components/treasury/state";
+import { Reveal } from "@/components/treasury/motion";
 import { shouldSkipInquiryEmail } from "@/lib/config-quiz";
 import { submitInquiry } from "@/lib/inquiry.functions";
 import { readStoredUtm, trackInquirySuccess, utmPayload } from "@/lib/utm";
@@ -142,7 +143,8 @@ export function AccessPanel() {
 
   return (
     <section id="access" className="scroll-mt-40 min-w-0 py-2 md:py-4">
-      <div className="sfp-module-hairline mb-5" aria-hidden="true" />
+      <Reveal delayMs={250} className="sfp-module p-5 md:p-7">
+      <div className="sfp-module-hairline -mx-5 -mt-5 mb-5 md:-mx-7 md:-mt-7" aria-hidden="true" />
       <p className="sfp-kicker">06 · 开户途径</p>
       <h2 className="mt-2 font-serif text-2xl text-fg md:text-3xl">内地资金接触美国国债的五个途径</h2>
       <p className="mt-2 max-w-2xl text-sm text-muted">下面只比较怎么买得到，不比较哪一个该买。门槛、额度与费用会变，下单前以银行或基金当时的规则为准。</p>
@@ -218,6 +220,7 @@ export function AccessPanel() {
           </div>
         </div>
       ) : null}
+    </Reveal>
     </section>
   );
 }
