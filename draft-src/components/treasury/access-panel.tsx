@@ -145,7 +145,19 @@ export function AccessPanel() {
     <section id="access" className="scroll-mt-40 min-w-0 py-2 md:py-4">
       <Reveal delayMs={250} className="sfp-module p-5 md:p-7">
       <div className="sfp-module-hairline -mx-5 -mt-5 mb-5 md:-mx-7 md:-mt-7" aria-hidden="true" />
-      <p className="sfp-kicker">06 · 开户途径</p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="sfp-kicker min-w-0">06 · 开户途径</p>
+        <button
+          type="button"
+          onClick={() => {
+            const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+          }}
+          className="inline-flex h-8 shrink-0 items-center rounded-md border border-accent/40 bg-accent px-2.5 text-xs font-medium text-accent-fg transition hover:brightness-110 active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          美债详解 - 点我
+        </button>
+      </div>
       <h2 className="mt-2 font-serif text-2xl text-fg md:text-3xl">内地资金接触美国国债的五个途径</h2>
       <p className="mt-2 max-w-2xl text-sm text-muted">下面只比较怎么买得到，不比较哪一个该买。门槛、额度与费用会变，下单前以银行或基金当时的规则为准。</p>
       <ol className="mt-5 grid gap-3">
