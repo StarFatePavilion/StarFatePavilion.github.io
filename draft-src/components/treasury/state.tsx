@@ -46,6 +46,17 @@ const FALLBACK: CurvePayload = {
   fetchedAt: 0,
 };
 
+
+/** Keep bundled long history; overlay live curve points by date so truncated exports cannot wipe year-ends. */
+function mergeCurve(next: CurvePayload): CurvePayload {
+  const byDate = new Map<string, YieldPoint>();
+  for (const point of HISTORY) byDate.set(point.d, point);
+  for (const point of next.history ?? []) byDate.set(point.d, point);
+  const history = [...byDate.values()].sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+  const spot = next.spot ?? history[history.length - 1] ?? SPOT;
+  return { ...next, history, spot };
+}
+
 const DEFAULT_WEIGHTS: Record<ScenarioId, number> = {
   ease: SCENARIOS[0].prob,
   firm: SCENARIOS[1].prob,
@@ -116,7 +127,7 @@ export function DeskState({ children, initial }: { children: ReactNode; initial?
   }, [lang]);
 
   useEffect(() => {
-    if (initial) setCurve(initial);
+    if (initial) setCurve(mergeCurve(initial));
   }, [initial]);
 
   useEffect(() => {
@@ -124,7 +135,7 @@ export function DeskState({ children, initial }: { children: ReactNode; initial?
     if (fresh) return;
     let cancel = false;
     const apply = (next: CurvePayload | null | undefined) => {
-      if (!cancel && next?.spot) setCurve(next);
+      if (!cancel && next?.spot) setCurve(mergeCurve(next));
     };
     refreshCurve()
       .then((next) => {

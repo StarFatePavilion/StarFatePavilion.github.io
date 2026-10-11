@@ -126,6 +126,8 @@ export type Copy = {
     untilEnd: string;
     close: string;
     pathNote: (end: string) => string;
+    collapse: string;
+    expand: (n: number) => string;
   };
   outlook: {
     title: string;
@@ -338,6 +340,8 @@ const hant: Copy = {
     untilEnd: "到期",
     close: "現在買入跑贏的是其後鎖定的收益率，不是把過去已經收取的利息贏回來。",
     pathNote: (end) => `橫軸由買入計至 ${end}。直線 100 為面值。模型以當日曲線估計剩餘年期的收益率。`,
+    collapse: "收起年份",
+    expand: (n) => `展開全部 ${n} 年`,
   },
   outlook: {
     title: "未來孳息的三條路徑",
@@ -537,6 +541,8 @@ const hans: Copy = {
     untilEnd: "到期",
     close: "现在买入跑赢的是其后锁定的收益率，不是把过去已经收取的利息赢回来。",
     pathNote: (end) => `横轴由买入计至 ${end}。直线 100 为面值。模型以当日曲线估计剩余期限的收益率。`,
+    collapse: "收起年份",
+    expand: (n) => `展开全部 ${n} 年`,
   },
   outlook: {
     title: "未来收益率的三条路径",
@@ -737,6 +743,8 @@ const en: Copy = {
     untilEnd: "maturity",
     close: "Buying now beats a prior year on the yield you lock from here, not on coupons already collected.",
     pathNote: (end) => `The axis runs from purchase to ${end}. The line at 100 is par. Remaining yield is read from that day’s curve.`,
+    collapse: "Show fewer years",
+    expand: (n) => `Show all ${n} years`,
   },
   outlook: {
     title: "Three paths for the yield",
