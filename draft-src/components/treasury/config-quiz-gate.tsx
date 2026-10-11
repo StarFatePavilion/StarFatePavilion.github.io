@@ -163,11 +163,11 @@ export function ConfigQuizGate({ lang = "zh-Hans", onComplete }: Props) {
               </div>
             ) : null}
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-8 flex flex-col gap-3">
               <button
                 type="button"
                 onClick={() => onComplete(result)}
-                className="h-12 flex-1 rounded-md bg-accent text-sm font-medium text-accent-fg"
+                className="sfp-cta-primary"
               >
                 {result.tier === "high" && !result.infoOnly ? "进入研究室并预约开户沟通" : "进入美国国债研究室"}
               </button>
@@ -179,7 +179,7 @@ export function ConfigQuizGate({ lang = "zh-Hans", onComplete }: Props) {
                   setResult(null);
                   setStep("intro");
                 }}
-                className="h-12 rounded-md border border-line px-4 text-sm text-muted"
+                className="h-11 w-full rounded-md border border-line px-4 text-sm text-muted transition hover:border-rail hover:text-fg active:scale-[0.99]"
               >
                 重新自测
               </button>
