@@ -12,6 +12,7 @@ import { money, pct, shortDate } from "@/lib/money";
 import { useDesk, useT } from "@/components/treasury/state";
 import { ChartTip, axisTick, gridStroke } from "@/components/treasury/charts";
 import { Close, Panel, Stat, WhenMounted } from "@/components/treasury/ui";
+import { useChartDraw } from "@/components/treasury/motion";
 
 function worstOpen(rows: Vintage[]): Vintage | undefined {
   return [...rows].filter((row) => !row.matured).sort((a, b) => a.price - b.price)[0];
@@ -72,6 +73,9 @@ export function BacktestPanel() {
   const played = line.slice(0, Math.min(line.length, frame + 1));
   const head = played[played.length - 1];
 
+  const drawBars = useChartDraw(`${tenor}:${y}`);
+  const drawPath = useChartDraw(`${selected.year}:${tenor}:${played.length}`);
+
   return (
     <Panel id="backtest" index="04" title={t.backtest.title} lede={t.backtest.lede}>
       <div className="grid gap-3 sm:grid-cols-3">
@@ -93,8 +97,9 @@ export function BacktestPanel() {
 
       <h3 className="mt-6 text-sm font-medium text-fg">{t.backtest.barTitle}</h3>
       <WhenMounted className="mt-3 h-52 w-full min-w-0">
+        <div ref={drawBars.ref} className="h-full w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={bars} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <BarChart key={drawBars.key} data={bars} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
             <YAxis tick={axisTick} axisLine={false} tickLine={false} width={36} />
             <Tooltip content={<ChartTip format={(value) => `${value.toFixed(2)}%`} />} />
@@ -103,6 +108,8 @@ export function BacktestPanel() {
               dataKey="entry"
               name={t.chart.entry}
               radius={[4, 4, 0, 0]}
+              isAnimationActive={drawBars.active}
+              animationDuration={drawBars.duration}
               onClick={(item) => {
                 const year = Number((item as { y?: number }).y);
                 if (Number.isFinite(year)) setPicked(year);
@@ -118,6 +125,7 @@ export function BacktestPanel() {
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        </div>
       </WhenMounted>
       <p className="mt-2 text-xs text-faint">{t.backtest.barNote}</p>
 
@@ -188,8 +196,9 @@ export function BacktestPanel() {
               : t.backtest.gapFlat}
         </p>
         <WhenMounted className="mt-3 h-52 w-full min-w-0">
+          <div ref={drawPath.ref} className="h-full w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={played} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <LineChart key={drawPath.key} data={played} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <XAxis dataKey="d" tick={axisTick} axisLine={false} tickLine={false} minTickGap={24} />
               <YAxis
                 domain={["dataMin - 1", "dataMax + 1"]}
@@ -207,11 +216,14 @@ export function BacktestPanel() {
                 stroke="var(--color-fg)"
                 strokeWidth={1.5}
                 dot={false}
-                isAnimationActive={false}
+                isAnimationActive={drawPath.active}
+                animationDuration={drawPath.duration}
+                animationEasing="ease-out"
               />
               {head ? <ReferenceDot x={head.d} y={head.price} r={4} fill="var(--color-fg)" /> : null}
             </LineChart>
           </ResponsiveContainer>
+          </div>
         </WhenMounted>
         <p className="mt-2 text-xs text-faint">
           {t.backtest.pathNote(selected.matured ? t.backtest.untilEnd : t.date(asOf))}

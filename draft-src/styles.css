@@ -213,3 +213,105 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+@layer components {
+  /* Cadence entrance — opacity + slight rise, once */
+  .sfp-enter {
+    opacity: 0;
+    transform: translateY(10px);
+    transition:
+      opacity 280ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: opacity, transform;
+  }
+  .sfp-enter-in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Quiz question crossfade / light slide */
+  .sfp-quiz-pane {
+    animation: sfp-quiz-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .sfp-quiz-pane-out {
+    animation: sfp-quiz-out 160ms cubic-bezier(0.4, 0, 1, 1) both;
+  }
+  @keyframes sfp-quiz-in {
+    from {
+      opacity: 0;
+      transform: translateX(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  @keyframes sfp-quiz-out {
+    from {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    to {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+  }
+
+  /* Tabular number flash on change */
+  .sfp-num-flash {
+    animation: sfp-num-flash 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  @keyframes sfp-num-flash {
+    0% {
+      opacity: 0.55;
+      filter: brightness(1.18);
+    }
+    100% {
+      opacity: 1;
+      filter: brightness(1);
+    }
+  }
+
+  /* #access veil reveal — deep → elevated lift */
+  .sfp-veil-band {
+    transition: background-color 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .sfp-veil-band.sfp-veil-revealed {
+    background: color-mix(in srgb, var(--color-veil) 55%, var(--color-elevated));
+  }
+
+  /* Slider thumb follow easing */
+  .sfp-slider-thumb {
+    transition:
+      transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .sfp-slider-thumb[data-state="active"] {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 28%, transparent);
+  }
+
+  .sfp-nav-active {
+    transition: box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1), color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sfp-enter,
+  .sfp-enter-in {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .sfp-quiz-pane,
+  .sfp-quiz-pane-out,
+  .sfp-num-flash {
+    animation: none !important;
+  }
+  .sfp-veil-band,
+  .sfp-veil-band.sfp-veil-revealed,
+  .sfp-slider-thumb,
+  .sfp-nav-active {
+    transition: none !important;
+  }
+}

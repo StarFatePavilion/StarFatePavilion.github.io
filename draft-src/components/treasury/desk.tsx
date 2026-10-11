@@ -12,8 +12,8 @@ import { OutlookPanel } from "@/components/treasury/outlook-panel";
 import { HoldPanel } from "@/components/treasury/hold-panel";
 import { AccessPanel } from "@/components/treasury/access-panel";
 import { ConfigQuizGate } from "@/components/treasury/config-quiz-gate";
-import { More, Term } from "@/components/treasury/ui";
-import { useTween } from "@/components/treasury/ui";
+import { More, Term, useTween } from "@/components/treasury/ui";
+import { useInViewOnce, useNumFlash } from "@/components/treasury/motion";
 import { clearQuizStored, pathLabel, readQuizStored, type QuizStored } from "@/lib/config-quiz";
 import type { YieldPoint } from "@/lib/history";
 import type { CurvePayload } from "@/lib/curve";
@@ -163,6 +163,12 @@ function DeskView({
   const semi = (principal * y) / 100 / 2;
   const interest = (principal * y * tenor) / 100;
   const dur = modifiedDuration(y / 100, y / 100, tenor);
+  const flashY = useNumFlash(shownY.toFixed(2));
+  const flashP = useNumFlash(money(principal, ccy));
+  const flashSemi = useNumFlash(money(semi, ccy, 2));
+  const flashTotal = useNumFlash(money(principal + interest, ccy));
+  const flashDur = useNumFlash(t.years(dur.toFixed(1)));
+  const [veilRef, veilIn] = useInViewOnce<HTMLDivElement>();
   const jumps = [
     ["#cash", t.jumps.cash],
     ["#shock", t.jumps.shock],
@@ -262,7 +268,7 @@ function DeskView({
           <span className="mr-2 inline-block size-1.5 rounded-full bg-up align-middle motion-safe:animate-pulse" />
           {t.asOf(tenor, t.date(asOf))}
         </p>
-        <p className="font-serif text-6xl tabular-nums text-fg md:text-7xl">
+        <p className={`font-serif text-6xl tabular-nums text-fg md:text-7xl ${flashY}`}>
           {shownY.toFixed(2)}
           <span className="text-3xl text-muted">%</span>
         </p>
@@ -360,21 +366,21 @@ function DeskView({
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <article className="sfp-rail rounded-md px-4 py-4">
             <p className="text-xs text-faint">{t.principal}</p>
-            <p className="mt-2 font-serif text-2xl tabular-nums text-fg md:text-3xl">{money(principal, ccy)}</p>
+            <p className={`mt-2 font-serif text-2xl tabular-nums text-fg md:text-3xl ${flashP}`}>{money(principal, ccy)}</p>
           </article>
           <article className="sfp-rail rounded-md px-4 py-4">
             <p className="text-xs text-faint">{t.semi}</p>
-            <p className="mt-2 font-serif text-2xl tabular-nums text-fg md:text-3xl">{money(semi, ccy, 2)}</p>
+            <p className={`mt-2 font-serif text-2xl tabular-nums text-fg md:text-3xl ${flashSemi}`}>{money(semi, ccy, 2)}</p>
           </article>
           <article className="sfp-rail rounded-md px-4 py-4">
             <p className="text-xs text-faint">{t.cash.total}</p>
-            <p className="mt-2 font-serif text-2xl tabular-nums text-fg md:text-3xl">{money(principal + interest, ccy)}</p>
+            <p className={`mt-2 font-serif text-2xl tabular-nums text-fg md:text-3xl ${flashTotal}`}>{money(principal + interest, ccy)}</p>
           </article>
           <article className="sfp-rail rounded-md px-4 py-4">
             <p className="text-xs text-faint">
               <Term tip={t.tips.duration}>{t.modDur}</Term>
             </p>
-            <p className="mt-2 font-serif text-2xl tabular-nums text-fg md:text-3xl">{t.years(dur.toFixed(1))}</p>
+            <p className={`mt-2 font-serif text-2xl tabular-nums text-fg md:text-3xl ${flashDur}`}>{t.years(dur.toFixed(1))}</p>
           </article>
         </div>
 
@@ -502,7 +508,10 @@ function DeskView({
       </div>
 
       {lang === "zh-Hans" ? (
-        <div className="sfp-veil-band mt-10">
+        <div
+          ref={veilRef}
+          className={`sfp-veil-band mt-10 ${veilIn ? "sfp-veil-revealed" : ""}`}
+        >
           <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
             <AccessPanel />
           </div>

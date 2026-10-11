@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Reveal, usePrefersReducedMotion } from "@/components/treasury/motion";
 import {
   pathBlurbFor,
   QUIZ_QUESTIONS,
@@ -35,17 +36,34 @@ export function ConfigQuizGate({ lang = "zh-Hans", onComplete }: Props) {
     setStep("result");
   };
 
+  const reduced = usePrefersReducedMotion();
+  const [paneKey, setPaneKey] = useState(0);
+  const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    setLeaving(false);
+    setPaneKey((k) => k + 1);
+  }, [index, step]);
+
   const onPick = (key: Choice) => {
     const id = question.id;
     const next = { ...picks, [id]: key } as Partial<QuizAnswers>;
     setPicks(next);
-    if (index < QUIZ_QUESTIONS.length - 1) {
-      window.setTimeout(() => setIndex((i) => i + 1), 160);
+    const advance = () => {
+      if (index < QUIZ_QUESTIONS.length - 1) {
+        setIndex((i) => i + 1);
+        return;
+      }
+      const answers = next as QuizAnswers;
+      const complete = QUIZ_QUESTIONS.every((q) => answers[q.id]);
+      if (complete) finish(answers);
+    };
+    if (reduced) {
+      advance();
       return;
     }
-    const answers = next as QuizAnswers;
-    const complete = QUIZ_QUESTIONS.every((q) => answers[q.id]);
-    if (complete) finish(answers);
+    setLeaving(true);
+    window.setTimeout(advance, 160);
   };
 
   const pathBlurb = useMemo(() => {
@@ -76,7 +94,7 @@ export function ConfigQuizGate({ lang = "zh-Hans", onComplete }: Props) {
         </header>
 
         {step === "intro" ? (
-          <section className="sfp-module p-6 md:p-8">
+          <Reveal className="sfp-module p-6 md:p-8" delayMs={40}>
             <div className="sfp-module-hairline -mx-6 -mt-6 mb-6 md:-mx-8 md:-mt-8" aria-hidden="true" />
             <h1 id="config-quiz-title" className="font-serif text-3xl text-fg md:text-4xl">
               先花 2 分钟做个配置能力自测
@@ -94,12 +112,16 @@ export function ConfigQuizGate({ lang = "zh-Hans", onComplete }: Props) {
             >
               开始自测
             </button>
-          </section>
+          </Reveal>
         ) : null}
 
         {step === "ask" ? (
           <section className="sfp-module p-6 md:p-8">
             <div className="sfp-module-hairline -mx-6 -mt-6 mb-6 md:-mx-8 md:-mt-8" aria-hidden="true" />
+            <div
+              key={paneKey}
+              className={leaving ? "sfp-quiz-pane-out" : "sfp-quiz-pane"}
+            >
             <h2 id="config-quiz-title" className="font-serif text-2xl text-fg md:text-3xl">
               {question.prompt}
             </h2>
@@ -136,11 +158,12 @@ export function ConfigQuizGate({ lang = "zh-Hans", onComplete }: Props) {
                 上一题
               </button>
             ) : null}
+            </div>
           </section>
         ) : null}
 
         {step === "result" && result && pathBlurb ? (
-          <section className="sfp-module p-6 md:p-8">
+          <Reveal className="sfp-module p-6 md:p-8" delayMs={40}>
             <div className="sfp-module-hairline -mx-6 -mt-6 mb-6 md:-mx-8 md:-mt-8" aria-hidden="true" />
             <p className="sfp-kicker">个人化美债路径图</p>
             <h2 id="config-quiz-title" className="mt-3 font-serif text-3xl text-fg md:text-4xl">
@@ -184,7 +207,7 @@ export function ConfigQuizGate({ lang = "zh-Hans", onComplete }: Props) {
                 重新自测
               </button>
             </div>
-          </section>
+          </Reveal>
         ) : null}
       </div>
     </div>
