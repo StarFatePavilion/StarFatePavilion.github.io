@@ -1,0 +1,23 @@
+name: Update treasury curve
+on:
+  schedule:
+    - cron: "30 22 * * 1-5"   # 06:30 HKT Tue-Sat
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: update-curve
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: node .github/scripts/update-curve.mjs
+      - run: |
+          if git diff --quiet curve.json; then echo "no change"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git add curve.json
+          git commit -m "chore: update curve.json $(date -u +%F)"
+          git push
